@@ -77,7 +77,7 @@ class Dataset:
         self.pose_all = []
 
         for scale_mat, world_mat in zip(self.scale_mats_np, self.world_mats_np):
-            P = world_mat @ scale_mat
+            P = world_mat @ scale_mat # 矩阵叉乘
             P = P[:3, :4]
             intrinsics, pose = load_K_Rt_from_P(None, P)
             self.intrinsics_all.append(torch.from_numpy(intrinsics).float())
