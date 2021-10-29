@@ -11,6 +11,9 @@ from scipy.spatial.transform import Slerp
 
 # This function is borrowed from IDR: https://github.com/lioryariv/idr
 def load_K_Rt_from_P(filename, P=None):
+    """
+    根据投影矩阵P，获取相机内、外参
+    """
     if P is None:
         lines = open(filename).read().splitlines()
         if len(lines) == 4:
@@ -18,10 +21,14 @@ def load_K_Rt_from_P(filename, P=None):
         lines = [[x[0], x[1], x[2], x[3]] for x in (x.split(" ") for x in lines)]
         P = np.asarray(lines).astype(np.float32).squeeze()
 
+    # 投影矩阵分解
+    # cameraMatrix – 3x3 camera matrix K.
+    # rotMatrix    – 3x3 external rotation matrix R.
+    # transVect    – Output 4x1 translation vector T.
     out = cv.decomposeProjectionMatrix(P)
-    K = out[0]
-    R = out[1]
-    t = out[2]
+    K = out[0] # 本质矩阵
+    R = out[1] # 旋转矩阵
+    t = out[2] # 平移矩阵
 
     K = K / K[2, 2]
     intrinsics = np.eye(4)
@@ -31,6 +38,8 @@ def load_K_Rt_from_P(filename, P=None):
     pose[:3, :3] = R.transpose()
     pose[:3, 3] = (t[:3] / t[3])[:, 0]
 
+    # intrinsics - 内参
+    # pose       - 外参  
     return intrinsics, pose
 
 
@@ -113,10 +122,14 @@ class Dataset:
         """
         Generate random rays at world space from one camera.
         """
+        # 取了batch_size个值，这些值介于（0，self.W）
         pixels_x = torch.randint(low=0, high=self.W, size=[batch_size])
         pixels_y = torch.randint(low=0, high=self.H, size=[batch_size])
+        # 随机采样的color[batch_size,3]
         color = self.images[img_idx][(pixels_y, pixels_x)]    # batch_size, 3
+        # 随机采样的color对应的mask[batch_size,3], 3个通道的值一样
         mask = self.masks[img_idx][(pixels_y, pixels_x)]      # batch_size, 3
+        # 空间三维点p(x,y,1) [batch_size,3]
         p = torch.stack([pixels_x, pixels_y, torch.ones_like(pixels_y)], dim=-1).float()  # batch_size, 3
         p = torch.matmul(self.intrinsics_all_inv[img_idx, None, :3, :3], p[:, :, None]).squeeze() # batch_size, 3
         rays_v = p / torch.linalg.norm(p, ord=2, dim=-1, keepdim=True)    # batch_size, 3
