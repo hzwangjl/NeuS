@@ -35,11 +35,11 @@ def load_K_Rt_from_P(filename, P=None):
     intrinsics[:3, :3] = K
 
     pose = np.eye(4, dtype=np.float32)
-    pose[:3, :3] = R.transpose()
+    pose[:3, :3] = R.transpose() # 转置
     pose[:3, 3] = (t[:3] / t[3])[:, 0]
-
-    # intrinsics - 内参
-    # pose       - 外参  
+    
+    # intrinsics - 4x4 内参
+    # pose       - 4x4 外参
     return intrinsics, pose
 
 
@@ -121,20 +121,29 @@ class Dataset:
     def gen_random_rays_at(self, img_idx, batch_size):
         """
         Generate random rays at world space from one camera.
+        对应单张RGB图，随机获取了batch_size个采样点，
+        输出相机平移矩阵、每个采样点的三维坐标（没有进行平移）、每个采样点的二维颜色值，每个采样点的mask值
         """
-        # 取了batch_size个值，这些值介于（0，self.W）
+        # 取了batch_size个像素点坐标（pixels_x，pixels_y）
         pixels_x = torch.randint(low=0, high=self.W, size=[batch_size])
         pixels_y = torch.randint(low=0, high=self.H, size=[batch_size])
-        # 随机采样的color[batch_size,3]
+        # 随机采样某个像素点的color[batch_size,3]
         color = self.images[img_idx][(pixels_y, pixels_x)]    # batch_size, 3
         # 随机采样的color对应的mask[batch_size,3], 3个通道的值一样
         mask = self.masks[img_idx][(pixels_y, pixels_x)]      # batch_size, 3
-        # 空间三维点p(x,y,1) [batch_size,3]
+        # 扩展维度，空间三维点p(x,y,1) [batch_size,3]
         p = torch.stack([pixels_x, pixels_y, torch.ones_like(pixels_y)], dim=-1).float()  # batch_size, 3
+        # p 左乘内参矩阵的逆 
         p = torch.matmul(self.intrinsics_all_inv[img_idx, None, :3, :3], p[:, :, None]).squeeze() # batch_size, 3
+        # 向量的单位化： p / p 的二范数  即 p[0] = p[0] / sqrt(p[0][0]*p[0][0] + p[0][1]*p[0][1] + p[0][2]*p[0][2])
         rays_v = p / torch.linalg.norm(p, ord=2, dim=-1, keepdim=True)    # batch_size, 3
+        # rays_v = R x K_inv x P
         rays_v = torch.matmul(self.pose_all[img_idx, None, :3, :3], rays_v[:, :, None]).squeeze()  # batch_size, 3
         rays_o = self.pose_all[img_idx, None, :3, 3].expand(rays_v.shape) # batch_size, 3
+        # rays_o: batch_sizex3 单张图片平移矩阵3x1
+        # rays_v: batch_sizex3 空间三维点坐标（没有T) 
+        # color:  batch_sizex3 二维点颜色坐标RGB
+        # mask:   batch_sizex1 二维点mask
         return torch.cat([rays_o.cpu(), rays_v.cpu(), color, mask[:, :1]], dim=-1).cuda()    # batch_size, 10
 
     def gen_rays_between(self, idx_0, idx_1, ratio, resolution_level=1):
