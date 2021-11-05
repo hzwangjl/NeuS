@@ -286,6 +286,7 @@ class NeuSRenderer:
         batch_size = len(rays_o)
         sample_dist = 2.0 / self.n_samples   # Assuming the region of interest is a unit sphere
         z_vals = torch.linspace(0.0, 1.0, self.n_samples)
+        # z_vals: batch_size x self.n_samples
         z_vals = near + (far - near) * z_vals[None, :]
 
         z_vals_outside = None
@@ -317,16 +318,21 @@ class NeuSRenderer:
         # Up sample
         if self.n_importance > 0:
             with torch.no_grad():
+                # pts: batch_size x n_samples x 3 三维空间点 z_vals是按n_samples的均匀切片的深度序列
                 pts = rays_o[:, None, :] + rays_d[:, None, :] * z_vals[..., :, None]
+                # sdf: batch_size x n_samples 获取每个空间采样点对应的sdf值？
                 sdf = self.sdf_network.sdf(pts.reshape(-1, 3)).reshape(batch_size, self.n_samples)
 
                 for i in range(self.up_sample_steps):
+                    # 降采样 batch_size x n_samples -> batch_size x (n_samples/up_sample_steps)
                     new_z_vals = self.up_sample(rays_o,
                                                 rays_d,
                                                 z_vals,
                                                 sdf,
                                                 self.n_importance // self.up_sample_steps,
                                                 64 * 2**i)
+                    # concat batch_size x n_samples -> batch_size x (n_samples + n_samples/up_sample_steps)
+                    # 最后一次循环，sdf没有concat why?
                     z_vals, sdf = self.cat_z_vals(rays_o,
                                                   rays_d,
                                                   z_vals,

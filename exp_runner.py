@@ -103,7 +103,7 @@ class Runner:
 
         for iter_i in tqdm(range(res_step)):
             data = self.dataset.gen_random_rays_at(image_perm[self.iter_step % len(image_perm)], self.batch_size)
-
+            # 平移矩阵、 空间三维点坐标（没有T)、 二维点颜色坐标RGB、 二维点mask
             rays_o, rays_d, true_rgb, mask = data[:, :3], data[:, 3: 6], data[:, 6: 9], data[:, 9: 10]
             near, far = self.dataset.near_far_from_sphere(rays_o, rays_d)
 
